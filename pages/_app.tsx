@@ -1,9 +1,10 @@
+import { AuthStateProvider } from '@/providers/auth';
 import '@/styles/base.css';
+import '@aws-amplify/ui-react/styles.css';
+import { Amplify } from 'aws-amplify';
 import type { AppProps } from 'next/app';
 import { Inter } from 'next/font/google';
-import { Amplify } from "aws-amplify";
-import awsmobile from "../config/aws-exports";
-import "@aws-amplify/ui-react/styles.css";
+import awsmobile from '../config/aws-amplify';
 
 // Todo: need to tell the difference between Prod, Dev, and localhost. There will be three environements, not just the two below.
 // Reference: https://docs.amplify.aws/lib/auth/social/q/platform/js/#full-sample
@@ -19,27 +20,27 @@ import "@aws-amplify/ui-react/styles.css";
 //       /^127(?:\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$/
 //     )
 // );
-const isLocalhost : Boolean = true;
+const isLocalhost: Boolean = true;
 
 // Assuming you have two redirect URIs, and the first is for production and second is for localhost
-const [
-  productionRedirectSignIn,
-  localRedirectSignIn,
-] = awsmobile.oauth.redirectSignIn.split(",");
+const [productionRedirectSignIn, localRedirectSignIn] =
+  awsmobile.oauth.redirectSignIn.split(',');
 
-const [
-  productionRedirectSignOut,
-  localRedirectSignOut,
-] = awsmobile.oauth.redirectSignOut.split(",");
+const [productionRedirectSignOut, localRedirectSignOut] =
+  awsmobile.oauth.redirectSignOut.split(',');
 
 const updatedAwsConfig = {
   ...awsmobile,
   oauth: {
     ...awsmobile.oauth,
-    redirectSignIn: isLocalhost ? localRedirectSignIn : productionRedirectSignIn,
-    redirectSignOut: isLocalhost ? localRedirectSignOut : productionRedirectSignOut,
-  }
-}
+    redirectSignIn: isLocalhost
+      ? localRedirectSignIn
+      : productionRedirectSignIn,
+    redirectSignOut: isLocalhost
+      ? localRedirectSignOut
+      : productionRedirectSignOut,
+  },
+};
 
 Amplify.configure(updatedAwsConfig);
 
@@ -48,13 +49,14 @@ const inter = Inter({
   subsets: ['latin'],
 });
 
-
 function MyApp({ Component, pageProps }: AppProps) {
   return (
     <>
-      <main className={inter.variable}>
-        <Component {...pageProps} />
-      </main>
+      <AuthStateProvider>
+        <main className={inter.variable}>
+          <Component {...pageProps} />
+        </main>
+      </AuthStateProvider>
     </>
   );
 }
