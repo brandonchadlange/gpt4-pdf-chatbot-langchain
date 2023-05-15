@@ -69,7 +69,11 @@ const AddUrl = () => {
   const promptForUrl = () => {
     const url = prompt('Please enter a url');
 
-    if (url === null || url.trim().length === 0) {
+    if (url === null) {
+      return;
+    }
+
+    if (url.trim().length === 0) {
       alert('URL cannot be empty.');
       return;
     }
