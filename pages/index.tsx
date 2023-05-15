@@ -6,16 +6,124 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { AWS_API_URL } from '@/config/aws-amplify';
 import { useAuth } from '@/providers/auth';
 import styles from '@/styles/Home.module.css';
 import { Message } from '@/types/chat';
+import {
+  makePostChat,
+  postPurgeDocuments,
+  postSendUrl,
+  postUploadFiles,
+} from '@/utils/mutations';
 import { Document } from 'langchain/document';
 import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
+const DocumentUpload = () => {
+  const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const openFileDialog = () => {
+    fileInputRef.current?.click();
+  };
+
+  const onFilesChange = async (e: any) => {
+    const files = Array.from(e.target.files) as File[];
+    setLoading(true);
+
+    try {
+      await postUploadFiles(files);
+    } catch (err: any) {
+      alert('an error occured uploading the documents');
+      console.log('err', err.response);
+    }
+
+    setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+  };
+
+  return (
+    <div>
+      <button
+        onClick={() => openFileDialog()}
+        className="border px-2 py-1 rounded-md w-40"
+      >
+        {loading ? <LoadingDots color="#000" /> : 'Upload documents'}
+      </button>
+      <input
+        multiple
+        accept="application/pdf,application/vnd.ms-excel,application/JSON,text/csv"
+        onChange={onFilesChange}
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+      />
+    </div>
+  );
+};
+
+const AddUrl = () => {
+  const [loading, setLoading] = useState(false);
+
+  const promptForUrl = () => {
+    const url = prompt('Please enter a url');
+
+    if (url === null || url.trim().length === 0) {
+      alert('URL cannot be empty.');
+      return;
+    }
+
+    sendUrl(url);
+  };
+
+  const sendUrl = async (url: string) => {
+    setLoading(true);
+
+    try {
+      await postSendUrl({
+        url,
+      });
+    } catch (err: any) {
+      alert('an error occured purging the documents');
+      console.log('err', err.response);
+    }
+  };
+
+  return (
+    <button onClick={promptForUrl} className="border px-2 py-1 rounded-md w-40">
+      {loading ? <LoadingDots color="#000" /> : 'Add url'}
+    </button>
+  );
+};
+
+const PurgeDocuments = () => {
+  const [loading, setLoading] = useState(false);
+
+  const purgeDocuments = async () => {
+    setLoading(true);
+
+    try {
+      await postPurgeDocuments();
+    } catch (err: any) {
+      alert('an error occured purging the documents');
+      console.log('err', err.response);
+    }
+  };
+
+  return (
+    <button
+      onClick={purgeDocuments}
+      className="border px-2 py-1 rounded-md w-40"
+    >
+      {loading ? <LoadingDots color="#000" /> : 'Purge documents'}
+    </button>
+  );
+};
+
 export default function Home() {
   const auth = useAuth();
+  const [model, setModel] = useState<string>('gpt-3.5-turbo');
   const [query, setQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +146,31 @@ export default function Home() {
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+
+  const postChat = makePostChat({
+    onSuccess(data, question) {
+      setMessageState((state) => ({
+        ...state,
+        messages: [
+          ...state.messages,
+          {
+            type: 'apiMessage',
+            message: data.text,
+            sourceDocs: data.sourceDocuments,
+          },
+        ],
+        history: [...state.history, [question, data.text]],
+      }));
+
+      setLoading(false);
+      messageListRef.current?.scrollTo(0, messageListRef.current.scrollHeight);
+    },
+    onError(response) {
+      setLoading(false);
+      setError('An error occurred while fetching the data. Please try again.');
+      console.log('error', error);
+    },
+  });
 
   //handle form submission
   async function handleSubmit(e: any) {
@@ -66,47 +199,11 @@ export default function Home() {
     setLoading(true);
     setQuery('');
 
-    try {
-      const response = await fetch(AWS_API_URL + '/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question,
-          history,
-        }),
-      });
-      const data = await response.json();
-      console.log('data', data);
-
-      if (data.error) {
-        setError(data.error);
-      } else {
-        setMessageState((state) => ({
-          ...state,
-          messages: [
-            ...state.messages,
-            {
-              type: 'apiMessage',
-              message: data.text,
-              sourceDocs: data.sourceDocuments,
-            },
-          ],
-          history: [...state.history, [question, data.text]],
-        }));
-      }
-      console.log('messageState', messageState);
-
-      setLoading(false);
-
-      //scroll to bottom
-      messageListRef.current?.scrollTo(0, messageListRef.current.scrollHeight);
-    } catch (error) {
-      setLoading(false);
-      setError('An error occurred while fetching the data. Please try again.');
-      console.log('error', error);
-    }
+    postChat({
+      model,
+      question,
+      history,
+    });
   }
 
   //prevent empty submissions
@@ -121,9 +218,9 @@ export default function Home() {
   return (
     <>
       <Layout>
-        <div>
+        {/* <div>
           <p>User: {auth.sub ? auth.sub : 'None'}</p>
-        </div>
+        </div> */}
         <div className="mx-auto flex flex-col gap-4">
           <h1 className="text-2xl font-bold leading-[1.1] tracking-tighter text-center">
             Chat and Summarize Your Docs
@@ -250,6 +347,31 @@ export default function Home() {
                     )}
                   </button>
                 </form>
+              </div>
+              <div className="flex justify-between w-full mt-3">
+                <div className="flex gap-3">
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    name="model"
+                    id="model"
+                    className="border px-2 py-1 rounded-md"
+                  >
+                    <option value="gpt-3.5-turbo" selected>
+                      gpt-3.5-turbo
+                    </option>
+                    <option value="gpt-4">gpt-4</option>
+                    <option value="gpt-3.5-turbo-0301">
+                      gpt-3.5-turbo-0301
+                    </option>
+                    <option value="gpt-4-0314">gpt-4-0314</option>
+                  </select>
+                  <DocumentUpload />
+                  <AddUrl />
+                </div>
+                <div className="flex gap-3">
+                  <PurgeDocuments />
+                </div>
               </div>
             </div>
             {error && (
